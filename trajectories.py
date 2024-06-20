@@ -17,7 +17,7 @@ def get_target_path(time, path_points):
     s = 1 * time
     xs, ys, _, phif, curv, g_c, dx, dy = path_interrogation(s, path_points)
     final_position = np.array([[xs], [ys], [0]], dtype=float)
-    first_derivative = np.array([[0.5 * dx], [0.5 * dy], [0]], dtype=float)
+    first_derivative = np.array([[1 * dx], [1 * dy], [0]], dtype=float)
     second_derivative = np.array([[0], [0], [0]], dtype=float)
     return final_position, first_derivative, second_derivative
 
@@ -80,6 +80,6 @@ def draw_traj_circle():
     # Desenhando a trajetória circular
     plt.plot(circle_x, circle_y, color='green', linestyle='--')
 
-def draw_traj_path(path_points):
+def draw_traj_path(path_points, axs):
     x_values, y_values = path_points[:2]
-    plt.plot(x_values, y_values, color="green", linestyle="--")
+    axs.plot(x_values, y_values, color="green", linestyle="--")

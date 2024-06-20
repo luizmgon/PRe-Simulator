@@ -21,13 +21,13 @@ T = np.array([[1,0,0],
               [0,1,tracking_point_distance],
               [0,0,1]], dtype=float)
 
-def dJ(n, v):
+def invdJ(n, v):
     phi = float(n[2])
     phi_dot = float(v[2])
   
     return phi_dot * np.array([
-        [-np.sin(phi), -np.cos(phi), 0],
-        [np.cos(phi), -np.sin(phi), 0],
+        [-np.sin(phi), np.cos(phi), 0],
+        [-np.cos(phi), -np.sin(phi), 0],
         [0, 0, 0],
     ], dtype=float)
 
@@ -57,7 +57,7 @@ def D(v):
                       [0, Yv, 0],
                       [0, 0, Nr]], dtype=float)
 
-def command_h(n_state, v_state, target, d_target, state_error_integral, dt, speed_error_integral, previous_speed_error):
+def command_h(n_state, v_state, target, d_target, dd_target, state_error_integral, dt, speed_error_integral, previous_state_error):
 
     invT = np.linalg.inv(T)
     invJ = np.linalg.inv(J(n_state))
@@ -65,13 +65,13 @@ def command_h(n_state, v_state, target, d_target, state_error_integral, dt, spee
     state_error = target - n_state
     state_error_integral += state_error * dt
 
-    if(np.all(np.abs(state_error[:2])< 0.5)): 
-        # print("quietei")
-        torque = np.zeros((3,1))
-        return torque, state_error_integral, speed_error_integral, previous_speed_error
+    # if(np.all(np.abs(state_error[:2])< 0.5)): 
+    #     # print("quietei")
+    #     torque = np.zeros((3,1))
+    #     return torque, state_error_integral, speed_error_integral, previous_speed_error
 
 
-    Kp_state = np.array([[1], [1], [1]])
+    Kp_state = np.array([[5], [5], [0]])
     Ki_state = np.array([[0], [0], [0]])
 
     n_correction = d_target + Kp_state * state_error + Ki_state * state_error_integral
@@ -83,15 +83,21 @@ def command_h(n_state, v_state, target, d_target, state_error_integral, dt, spee
     speed_error =  vref - v_state
     speed_error_integral += speed_error * dt
 
-    speed_error_derivative = 0
-    if(previous_speed_error is not None):
-        speed_error_derivative = (speed_error - previous_speed_error) / dt
+    state_error_derivative = 0
+    if(previous_state_error is not None):
+        state_error_derivative = (state_error - previous_state_error) / dt
 
-    Kp_speed = np.array([[1], [1], [1]])
-    Ki_speed = np.array([[0], [0], [0]])
-    Kd_speed = np.array([[0.5], [1], [0.8]])
+    Kp_speed = np.array([[10], [10], [10]])
 
-    ac = Kp_speed * speed_error + Ki_speed * speed_error_integral + Kd_speed * speed_error_derivative
+    dn_correction = dd_target + Kp_state * state_error_derivative + Ki_state * state_error
+
+    dvref = H @ invT @ (invdJ(n_state,v_state) @ n_correction + J(n_state) @ dn_correction)
+
+    # dvref = 0
+
+    # print(dvref)
+
+    ac = dvref + Kp_speed * speed_error
 
     Cv = C(v_state)
     Dv = D(v_state)
@@ -100,7 +106,7 @@ def command_h(n_state, v_state, target, d_target, state_error_integral, dt, spee
     # torque[0] = 0
     torque[1] = 0
 
-    return torque, state_error_integral, speed_error_integral, speed_error
+    return torque, state_error_integral, speed_error_integral, state_error, ac, vref-v_state
 
 def command_sous_diag(n_state, v_state, k):
 
@@ -216,11 +222,6 @@ def command_auv(v_state, error_state, u_target, path_points, s_values, mu_values
     u,v,r = v_state.flatten()
     s1, y1, phi, s = error_state.flatten()
 
-    # if(s1 > 5): s1 = 5
-    # if(s1 <-5): s1 = -5
-    # if(y1 > 5): y1 = 5
-    # if(y1 <-5): y1 = -5
-
     # Gains
     k1 = 1
     k2 = 1
@@ -230,8 +231,9 @@ def command_auv(v_state, error_state, u_target, path_points, s_values, mu_values
 
     # Masses
     m = 75
+    m_r = M_model[2,2]
     m_u = M_model[0,0]
-    m_ur = M_model[1,2] #FIXME
+    m_ur = M_model[1,2]
     m_v = M_model[1,1]
 
     Yv = -157.5
@@ -264,9 +266,10 @@ def command_auv(v_state, error_state, u_target, path_points, s_values, mu_values
     if(s == 0 and ds < 0): ds = 0
 
     # xs, ys, phif, curv, dcurv_dt, g_c = path_desc(s, ds,s_values, mu_values, phi_values)
-    xs, ys, _, phif, curv, g_c = path_interrogation(s, path_points)
+    xs, ys, _, phif, curv, g_c = path_interrogation(s, path_points)[:6]
 
     dcurv_dt = g_c * ds
+    # dcurv_dt = 0
 
     #Beta
     beta = np.arctan2(v, u)
@@ -281,12 +284,15 @@ def command_auv(v_state, error_state, u_target, path_points, s_values, mu_values
     # dd_s = np.clip(dd_s, -5, 5)
     dd_y1 = -dcurv_dt * ds * s1 - curv * dd_s * s1 - curv * ds * d_s1 + d_vt * np.sin(phi) + v_t*np.cos(phi) * d_phi
 
+    if(dd_s > 10000):
+        a = 1
+
     # Delta derivatives
     k_delta = 0.5
     phi_a = np.pi/2
     delta = -phi_a * np.tanh(k_delta * y1)
     diff = phi - delta
-    print(diff)
+    # print(diff)
     d_delta = (-phi_a * k_delta * d_y1)/  (np.cosh(k_delta * y1))**2
     dd_delta = -phi_a * k_delta*(dd_y1/(np.cosh(k_delta * y1)**2) - 2 * k_delta * d_y1**2 * np.tanh(k_delta * y1) / (np.cosh(k_delta*y1))**2)
 
@@ -298,7 +304,7 @@ def command_auv(v_state, error_state, u_target, path_points, s_values, mu_values
     dr = (f_alpha - k3*(r - rd) - k5*sawtooth(phi - delta))/(1 - (m_ur/m_v)*(np.cos(beta)**2))
 
     Fu = m_u * du + d_u
-    N_r = m * dr + d_r
+    N_r = m_r * dr + d_r
 
     # if(Fu >= 0):
     #     Fu = max(Fu, 1000)
@@ -307,13 +313,115 @@ def command_auv(v_state, error_state, u_target, path_points, s_values, mu_values
     #     N_r = max(N_r, 1000)
     # else: N_r = min(N_r, -1000)
 
-    Fu = np.clip(Fu, -1000, 1000)
-    N_r = np.clip(N_r, -1000, 1000)
+    # Fu = np.clip(Fu, -1000, 1000)
+    # N_r = np.clip(N_r, -1000, 1000)
 
 
     torque = np.array([[Fu], [0], [N_r]])
 
-    return torque, ds
+    return torque, ds, xs, ys, r - rd, u - u_target, dr, du, dcurv_dt
+
+def command_auv_model(v_state, error_state, u_target, path_points, s_values, mu_values, phi_values):
+    # State
+    u,v,r = v_state.flatten()
+    s1, y1, phi, s = error_state.flatten()
+
+    # Gains
+    k1 = 1
+    k2 = 0.1
+    k3 = 1
+    k4 = 1
+    k5 = 1
+
+    Cv = C(v_state)
+    Dv = D(v_state)
+
+    m_ur = Cv[1,2]
+    m_v = M[1,1]
+
+    # Speed derivatives
+    du = -k4*(u - u_target)
+    dd_u = -k4 * du
+    dv = (-Cv[1,2]*r - Dv[1,1]*v)/M[1,1]
+   
+    v_t = np.sqrt(u**2 + v**2)
+    d_vt = (u*du + v*dv) / v_t
+
+    ds = v_t * np.cos(phi) + k2 * s1
+
+    # ds = np.clip(ds, -5, 5)
+
+    if(s == 0 and ds < 0): ds = 0
+
+    # xs, ys, phif, curv, dcurv_dt, g_c = path_desc(s, ds,s_values, mu_values, phi_values)
+    xs, ys, _, phif, curv, g_c = path_interrogation(s, path_points)[:6]
+
+    dcurv_dt = g_c * ds
+    # dcurv_dt = 0
+
+    #Beta
+    beta = np.arctan2(v, u)
+    d_beta = (dv*u - du*v) / (u**2 + v**2)
+
+    d_phi = r + d_beta - curv * ds
+
+    # Error state derivatives
+    d_s1 = -ds*(1-curv*y1) + v_t*np.cos(phi)
+    d_y1 = -curv * ds * s1 + v_t * np.sin(phi)
+    dd_s = d_vt * np.cos(phi) - v_t * np.sin(phi) * d_phi + k2 * d_s1
+    # dd_s = np.clip(dd_s, -5, 5)
+    dd_y1 = -dcurv_dt * ds * s1 - curv * dd_s * s1 - curv * ds * d_s1 + d_vt * np.sin(phi) + v_t*np.cos(phi) * d_phi
+
+    if(dd_s > 10000):
+        a = 1
+
+    # Delta derivatives
+    k_delta = 1
+    phi_a = np.pi/2
+    delta = -phi_a * np.tanh(k_delta * y1)
+    diff = phi - delta
+    # print(diff)
+    d_delta = (-phi_a * k_delta * d_y1)* (1 - (np.tanh(k_delta * y1)) ** 2)
+
+    a1 = - 2 * k_delta * d_y1**2 
+    a2 = np.tanh(k_delta * y1)
+
+    dd_delta = -phi_a * k_delta*(dd_y1/(np.cosh(k_delta * y1)**2) - 2 * k_delta * d_y1**2 * np.tanh(k_delta * y1) / (np.cosh(k_delta*y1))**2)
+
+    if(dd_delta > 800):
+        a = 1
+
+    rd = d_delta - d_beta - k1 * sawtooth(phi - delta) + curv * ds
+
+    if((r - rd) > 100):
+        a = 4
+
+    f_alpha = 1*dd_delta - k1*(d_phi - d_delta) + curv*dd_s + g_c * ds 
+    + dd_u*v/v_t**2 + 2 * d_vt * d_beta / v_t + (u/v_t**2)*((m_ur/m_v)*du * r + (Dv[1,1]*dv)/m_v)
+    
+    dr = (f_alpha - k3*(r - rd) - k5*sawtooth(phi - delta))/(1 - (m_ur/m_v)*(np.cos(beta)**2))
+
+    ac = np.array([[du],[dv],[dr]])
+
+    ac = np.clip(ac, -500, 500)
+
+    torque = M @ ac + Cv @ v_state + Dv @ v_state
+
+
+    # if(Fu >= 0):
+    #     Fu = max(Fu, 1000)
+    # else: Fu = min(Fu, -1000)
+    # if(N_r >= 0):
+    #     N_r = max(N_r, 1000)
+    # else: N_r = min(N_r, -1000)
+
+    # Fu = np.clip(Fu, -1000, 1000)
+    # N_r = np.clip(N_r, -1000, 1000)
+
+
+
+    return torque, ds, xs, ys, r - rd, u - u_target, ac[2], ac[0], dcurv_dt
+
 
 def draw_p():
     def dmu_ds(s, mu, a2, a4, b1):
@@ -379,8 +487,8 @@ def get_mu(s_in,s_values, mu_values):
 
 def get_path_points():
     # x = np.array([0, 0,  0,  0,  0,  0,  0])
-    # x = np.array([0, -10, -20, -10, 0, -10, -20])
-    x = np.array([2, -3, -8, -3, 2, -3, -8])
+    x = np.array([0, -10, -20, -10, 0, -10, -20])
+    # x = np.array([2, -3, -8, -3, 2, -3, -8])
     y = np.array([  0,   5, 10, 15, 20,  25, 30])
 
     cs = CubicSpline(y, x)

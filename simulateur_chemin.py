@@ -95,7 +95,7 @@ def main():
     traj = sys.argv[1]
 
     # Simulation settings.
-    dt_ctr = 0.1
+    dt_ctr = 0.01
     total_time = 100.0
     steps = int(total_time / dt_ctr)
 

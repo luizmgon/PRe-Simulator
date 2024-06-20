@@ -71,55 +71,88 @@ def get_new_target(time, traj, path_points):
     
 
 
-def draw_traj(traj, path_points):
+def draw_traj(traj, path_points, axs):
     if traj == "l":
         return draw_traj_line()
     elif traj == 'c':
         return draw_traj_circle()
-    else: return draw_traj_path(path_points)
+    else: return draw_traj_path(path_points, axs)
 
 
 # Show the current state, target, and trajectory on a plot.
 def affichage(target, traj, positions_x, positions_y, n, path_points):
-    plt.clf()
+        
+        plt.clf()
 
+        x_limit = [-10, 5]
+        y_limit = [-1, 32]
+        axs = plt.subplot(111)
+        draw_traj(traj, path_points, axs)
+
+        plt.scatter(target[0], target[1], color="red", marker="o")
+        plt.plot(positions_x, positions_y, color="blue")
+        plt.xlim(x_limit)
+        plt.ylim(y_limit)
+        draw_tank(n)
+
+        plt.draw()
+        plt.pause(0.001)
+
+def affichage_complet(target, traj, positions_x, positions_y, n, path_points, times, errors, error_lin_speed, error_ang_speed, taus_lin, taus_ang):
+    # Criar uma figura com 4 subplots
+    fig, axs = plt.subplots(2, 2, figsize=(12, 8))
+    axs1 = plt.subplot(221)
+    axs2 = plt.subplot(222)
+    axs3 = plt.subplot(425)
+    axs4 = plt.subplot(427)
+    axs5 = plt.subplot(426)
+    axs6 = plt.subplot(428)
     x_limit = [-10, 5]
     y_limit = [-1, 32]
 
-    draw_traj(traj, path_points)
+    # Primeiro gráfico
+    axs1.plot(positions_x, positions_y, color="blue")
+    axs1.scatter(target[0], target[1], color="red", marker="o")
+    axs1.set_xlim(x_limit)
+    axs1.set_ylim(y_limit)
+    axs1.set_title("Trajetória")
+    axs1.grid(True)
+    # Função para desenhar a trajetória
+    draw_traj(traj, path_points, axs1)  # Substitua pela sua função de desenho
+    # draw_tank(n)  # Substitua pela sua função de desenho do tanque
 
-    plt.scatter(target[0], target[1], color="red", marker="o")
-    plt.plot(positions_x, positions_y, color="blue")
-    plt.xlim(x_limit)
-    plt.ylim(y_limit)
-    draw_tank(n)
+    # Segundo gráfico
+    axs2.plot(times, errors, color="blue")
+    axs2.plot([-10, 100], [errors[-1], errors[-1]], color="green", linestyle='--')
+    axs2.set_xlim([times[0], times[-1]])
+    axs2.set_title("Erros ao Longo do Tempo")
+    axs2.grid(True)
 
-    plt.draw()
-    plt.pause(0.001)
+    # Terceiro gráfico
+    axs3.plot(range(len(taus_lin)), taus_lin)
+    axs3.set_title("Linear acceleration")
+    axs3.grid(True)
 
+    axs4.plot(range(len(taus_ang)), taus_ang)
+    axs4.set_title("Angular acceleration")
+    axs4.grid(True)
 
-def evolution(n, v, cmd, dt_ctr, positions_x, positions_y, times):
-    steps = 1
+    # Quarto gráfico
+    axs5.plot(range(len(error_lin_speed)), error_lin_speed)
+    axs5.set_title("Linear speed error")
+    axs5.grid(True)
 
-    for _ in range(steps):
-        dn, dv = model(n, v, cmd)
-        n += dn * dt_ctr / steps
-        v += dv * dt_ctr / steps
+    axs6.plot(range(len(error_ang_speed)), error_ang_speed)
+    axs6.set_title("Angular speed error")
+    axs6.grid(True)
 
-        time = times[-1] + dt_ctr / steps
-        positions_x.append(n[0][0])
-        positions_y.append(n[1][0])
-        times.append(time)
+    # Ajustar layout para não sobrepor títulos e eixos
+    plt.tight_layout()
 
-    while n[2] > 2 * np.pi:
-        n[2] -= 2 * np.pi
-    while n[2] < -2 * np.pi:
-        n[2] += 2 * np.pi
+    # Mostrar a figura
+    plt.show()
 
-    return n, v
-
-
-def evolution2(n0, v0, cmd, dt_ctr, positions_x, positions_y, times):
+def evolution2(n0, v0, cmd, dt_ctr, positions_x, positions_y, times, errors, target):
 
     t_span = (0, dt_ctr)
 
@@ -140,8 +173,11 @@ def evolution2(n0, v0, cmd, dt_ctr, positions_x, positions_y, times):
 
     positions_x += list(sol.y[0][1:])
     positions_y += list(sol.y[1][1:])
+    error = mean(list(np.sqrt((sol.y[0][1:] - target[0])**2 + (sol.y[1][1:] - target[1])**2)))
+    errors.append(error)
 
-    times += list(sol.t[1:] + times[-1])
+    # times += list(sol.t[1:] + times[-1])
+    times.append(sol.t[-1] + times[-1])
 
     return n, v
 
@@ -154,8 +190,8 @@ def main():
     traj = "3"
 
     # Simulation settings
-    dt = 0.1
-    total_time = 100.0
+    dt = 0.05
+    total_time = 10.0
     steps = int(total_time / dt)
     time = 0
 
@@ -166,29 +202,41 @@ def main():
     # Lists to store the x and y positions and times.
     positions_x = [n[0][0]]
     positions_y = [n[1][0]]
+    errors = [0]
+    error_lin_speed = []
+    error_ang_speed = []
     times = [0]
+    taus_lin = []
+    taus_ang = []
 
     state_error_integral = 0
     speed_error_integral = 0
-    speed_error = None
+    state_error = None
 
     path_points = get_path_points()
 
     # Simulation
     for step in range(steps):
 
+
         target, d_target, dd_target = get_new_target(time, traj, path_points)
 
+        # affichage(target, traj, positions_x, positions_y, n, path_points)
+
+
         # cmd = command(com, n, v, target, d_target, dd_target)
-        cmd, state_error_integral, speed_error_integral, speed_error = command(n, v, target, d_target, state_error_integral, dt, speed_error_integral, speed_error)
+        cmd, state_error_integral, speed_error_integral, state_error, ac, er_sp = command_h(n, v, target, d_target, dd_target, state_error_integral, dt, speed_error_integral, state_error)
 
-        n, v = evolution2(n, v, cmd, dt, positions_x, positions_y, times)
+        error_lin_speed.append(er_sp[0])
+        error_ang_speed.append(er_sp[2])
+        taus_lin.append(ac[0])
+        taus_ang.append(ac[2])
 
-        affichage(target, traj, positions_x, positions_y, n, path_points)
+        n, v = evolution2(n, v, cmd, dt, positions_x, positions_y, times, errors, target)
 
         time = times[-1]
 
-    plt.show()
+    affichage_complet(target, traj, positions_x, positions_y, n, path_points, times, errors, error_lin_speed, error_ang_speed, taus_lin, taus_ang)
 
 
 if __name__ == "__main__":
