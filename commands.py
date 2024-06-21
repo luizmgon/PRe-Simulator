@@ -12,7 +12,7 @@ M_model = np.array([[80.2815,     0,       0],
              [       0, 157.5,      11],
              [       0,    11, 41.9327]], dtype=float)
 
-tracking_point_distance = 1
+tracking_point_distance = 0.8
 
 H = np.array([[1,0,0],
               [0,0,0],
@@ -59,10 +59,12 @@ def D(v):
 
 def command_h(n_state, v_state, target, d_target, dd_target, state_error_integral, dt, speed_error_integral, previous_state_error):
 
+    ne_state = n_state + np.array([[tracking_point_distance*np.cos(n_state[2,0])], [tracking_point_distance*np.sin(n_state[2,0])], [0]])
+
     invT = np.linalg.inv(T)
-    invJ = np.linalg.inv(J(n_state))
+    invJ = np.linalg.inv(J(ne_state))
     
-    state_error = target - n_state
+    state_error = target - ne_state
     state_error_integral += state_error * dt
 
     # if(np.all(np.abs(state_error[:2])< 0.5)): 
@@ -71,7 +73,7 @@ def command_h(n_state, v_state, target, d_target, dd_target, state_error_integra
     #     return torque, state_error_integral, speed_error_integral, previous_speed_error
 
 
-    Kp_state = np.array([[5], [5], [0]])
+    Kp_state = np.array([[1], [1], [0]])
     Ki_state = np.array([[0], [0], [0]])
 
     n_correction = d_target + Kp_state * state_error + Ki_state * state_error_integral
@@ -91,7 +93,7 @@ def command_h(n_state, v_state, target, d_target, dd_target, state_error_integra
 
     dn_correction = dd_target + Kp_state * state_error_derivative + Ki_state * state_error
 
-    dvref = H @ invT @ (invdJ(n_state,v_state) @ n_correction + J(n_state) @ dn_correction)
+    dvref = H @ invT @ (invdJ(ne_state,v_state) @ n_correction + J(ne_state) @ dn_correction)
 
     # dvref = 0
 
@@ -106,7 +108,7 @@ def command_h(n_state, v_state, target, d_target, dd_target, state_error_integra
     # torque[0] = 0
     torque[1] = 0
 
-    return torque, state_error_integral, speed_error_integral, state_error, ac, vref-v_state
+    return torque, state_error_integral, speed_error_integral, state_error, ac, vref, ne_state
 
 def command_sous_diag(n_state, v_state, k):
 
@@ -487,8 +489,8 @@ def get_mu(s_in,s_values, mu_values):
 
 def get_path_points():
     # x = np.array([0, 0,  0,  0,  0,  0,  0])
-    x = np.array([0, -10, -20, -10, 0, -10, -20])
-    # x = np.array([2, -3, -8, -3, 2, -3, -8])
+    # x = np.array([0, -10, -20, -10, 0, -10, -20])
+    x = np.array([2, -3, -8, -3, 2, -3, -8])
     y = np.array([  0,   5, 10, 15, 20,  25, 30])
 
     cs = CubicSpline(y, x)
@@ -500,26 +502,26 @@ def get_path_points():
     s = np.zeros_like(x)
     s[1:] = np.cumsum(distances)
 
+    ds = np.gradient(s)
+
     # Calcular as derivadas usando diferenças finitas
-    dx = np.gradient(x)
-    dy = np.gradient(y)
-    ddx = np.gradient(dx)
-    ddy = np.gradient(dy)
+    dx = np.gradient(x) / ds
+    dy = np.gradient(y) / ds
+
+    ddx = np.gradient(dx) / ds
+    ddy = np.gradient(dy) / ds
 
     phi_f = np.arctan2(dy, dx)
 
     # Calcular a curvatura
     curvature = dx * ddy - dy * ddx / (dx**2 + dy**2)**1.5
 
-    # Calcular as diferenças em s e c
-    ds = np.diff(s)
-    dc = np.diff(curvature)
+    dc = np.gradient(curvature)
 
     # Calcular o gradiente de c em relação a s
     g_c = dc / ds
-    g_c = np.insert(g_c, 0, 0)
 
-    return np.vstack((x, y, s, phi_f, curvature, g_c, dx, dy))
+    return np.vstack((x, y, s, phi_f, curvature, g_c, dx, dy, ddx, ddy))
 
     if(True):
             # Plotar o caminho, curvatura, phi_f e g_curvature

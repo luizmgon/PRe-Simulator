@@ -80,7 +80,7 @@ def draw_traj(traj, path_points, axs):
 
 
 # Show the current state, target, and trajectory on a plot.
-def affichage(target, traj, positions_x, positions_y, n, path_points):
+def affichage(target, traj, positions_x, positions_y, n, path_points ,ne_state):
         
         plt.clf()
 
@@ -90,6 +90,7 @@ def affichage(target, traj, positions_x, positions_y, n, path_points):
         draw_traj(traj, path_points, axs)
 
         plt.scatter(target[0], target[1], color="red", marker="o")
+        plt.scatter(ne_state[0], ne_state[1], color="yellow", marker="x")
         plt.plot(positions_x, positions_y, color="blue")
         plt.xlim(x_limit)
         plt.ylim(y_limit)
@@ -190,13 +191,13 @@ def main():
     traj = "3"
 
     # Simulation settings
-    dt = 0.05
+    dt = 0.02
     total_time = 10.0
     steps = int(total_time / dt)
     time = 0
 
     # Initial state
-    n = np.array([[0], [4], [np.pi / 2]], dtype=float)  # x, y, Φ
+    n = np.array([[4], [10], [np.pi / 2]], dtype=float)  # x, y, Φ
     v = np.array([[1], [0], [0]], dtype=float)  # u, v, r
 
     # Lists to store the x and y positions and times.
@@ -221,11 +222,10 @@ def main():
 
         target, d_target, dd_target = get_new_target(time, traj, path_points)
 
-        # affichage(target, traj, positions_x, positions_y, n, path_points)
 
 
         # cmd = command(com, n, v, target, d_target, dd_target)
-        cmd, state_error_integral, speed_error_integral, state_error, ac, er_sp = command_h(n, v, target, d_target, dd_target, state_error_integral, dt, speed_error_integral, state_error)
+        cmd, state_error_integral, speed_error_integral, state_error, ac, er_sp, ne_state = command_h(n, v, target, d_target, dd_target, state_error_integral, dt, speed_error_integral, state_error)
 
         error_lin_speed.append(er_sp[0])
         error_ang_speed.append(er_sp[2])
@@ -235,6 +235,10 @@ def main():
         n, v = evolution2(n, v, cmd, dt, positions_x, positions_y, times, errors, target)
 
         time = times[-1]
+        # print(time)
+
+        affichage(target, traj, positions_x, positions_y, n, path_points, ne_state)
+
 
     affichage_complet(target, traj, positions_x, positions_y, n, path_points, times, errors, error_lin_speed, error_ang_speed, taus_lin, taus_ang)
 

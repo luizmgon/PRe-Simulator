@@ -14,11 +14,12 @@ def get_target_line(time):
     return final_position, first_derivative, second_derivative
 
 def get_target_path(time, path_points):
-    s = 1 * time
-    xs, ys, _, phif, curv, g_c, dx, dy = path_interrogation(s, path_points)
+    ds = 3
+    s = ds * time
+    xs, ys, _, phif, curv, g_c, dx, dy, ddx, ddy = path_interrogation(s, path_points)
     final_position = np.array([[xs], [ys], [0]], dtype=float)
-    first_derivative = np.array([[1 * dx], [1 * dy], [0]], dtype=float)
-    second_derivative = np.array([[0], [0], [0]], dtype=float)
+    first_derivative = np.array([[ds * dx], [ds * dy], [0]], dtype=float)
+    second_derivative = np.array([[ds * ddx], [ds * ddy], [0]], dtype=float)
     return final_position, first_derivative, second_derivative
 
 
