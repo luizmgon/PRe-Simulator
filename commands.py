@@ -43,10 +43,11 @@ def C(v_state):
     u,v,r = v_state.flatten()
     Xudot = -5.2815
     Yvdot = -82.5
+    Yrdot = -11
 
-    c = np.array([[0         ,         0,  Yvdot * v],
+    c = np.array([[0         ,         0,  Yvdot * v + Yrdot * r],
                   [0         ,         0, -Xudot * u],
-                  [-Yvdot * v, Xudot * u,          0]], dtype=float) 
+                  [-Yvdot * v - Yrdot * r, Xudot * u,          0]], dtype=float) 
     return c
       
 def D(v):
@@ -115,6 +116,8 @@ def command_sous_diag(n_state, v_state, k):
     x,y,phi = n_state.flatten()
     u,v,r = v_state.flatten()
 
+    # if(u > 2.5): return np.array([[0],[0],[0]])
+
 
     Cv = C(v_state)
     Dv = D(v_state)
@@ -133,7 +136,6 @@ def command_sous_diag(n_state, v_state, k):
     ac[1] = -10*(r - ac[1])
 
     ac = np.array([[float(ac[0])],[dv],[float(ac[1])]])
-    torque = M @ ac + Cv @ v_state + Dv @ v_state
     torque = M @ ac + Cv @ v_state + Dv @ v_state
 
     return torque
@@ -178,17 +180,15 @@ def command_sous(n_state, v_state, k):
 
     return torque
 
-def command_los(n_state, v_state, target, previous_theta_d):
-    
+def command_los(n_state, v_state, target, previous_theta_d, u_target, dt_ctr):
+    u = v_state[0,0]
     x,y,theta = n_state.flatten()
     xd, yd = target.flatten()[:2]
 
 
     desired = np.arctan2(yd - y, xd - x)
-    theta_d = theta - desired
+    theta_d = sawtooth(theta - desired)
 
-    if(theta_d >= np.pi): theta_d -= 2*np.pi
-    elif(theta_d <= -np.pi): theta_d += 2*np.pi
 
     k = -12
     # print(theta_d)
@@ -199,10 +199,13 @@ def command_los(n_state, v_state, target, previous_theta_d):
     
     previous_theta_d = theta_d
 
-    ac = np.array([[0],[0],[k*theta_d + 5*k*(variacao)]])
+    k4 = 1
+
+    ac = np.array([[-k4*(u - u_target)],[0],[k*theta_d + 1*k*(variacao)/dt_ctr]])
 
     # ac = np.array([[0],[0],[k*theta_d]])
     torque = M @ ac + C(v_state) @ v_state + D(v_state) @ v_state
+    torque[1] = 0
 
     return previous_theta_d, torque
 
@@ -253,7 +256,7 @@ def command_auv(v_state, error_state, u_target, path_points, s_values, mu_values
     dd_u = -k4 * du
     dv = (-m_ur*u*r - d_v ) / m_v
     v_t = np.sqrt(u**2 + v**2)
-    d_vt = (u*du + v*dv) / v_t
+    d_vt = (u*du + v*dv) / v_t if v_t != 0 else 0
 
     # Damping terms
     d_u = -Xuu * u**2 - Xvv * v**2
@@ -275,7 +278,7 @@ def command_auv(v_state, error_state, u_target, path_points, s_values, mu_values
 
     #Beta
     beta = np.arctan2(v, u)
-    d_beta = (dv*u - du*v) / (u**2 + v**2)
+    d_beta = (dv*u - du*v) / (u**2 + v**2) if v_t != 0 else 0
 
     d_phi = r + d_beta - curv * ds
 
@@ -290,7 +293,7 @@ def command_auv(v_state, error_state, u_target, path_points, s_values, mu_values
         a = 1
 
     # Delta derivatives
-    k_delta = 0.5
+    k_delta = 1
     phi_a = np.pi/2
     delta = -phi_a * np.tanh(k_delta * y1)
     diff = phi - delta
@@ -323,14 +326,14 @@ def command_auv(v_state, error_state, u_target, path_points, s_values, mu_values
 
     return torque, ds, xs, ys, r - rd, u - u_target, dr, du, dcurv_dt
 
-def command_auv_model(v_state, error_state, u_target, path_points, s_values, mu_values, phi_values):
+def command_auv_model(v_state, error_state, u_target, path_points):
     # State
     u,v,r = v_state.flatten()
     s1, y1, phi, s = error_state.flatten()
 
     # Gains
     k1 = 1
-    k2 = 0.1
+    k2 = 1
     k3 = 1
     k4 = 1
     k5 = 1
@@ -347,7 +350,7 @@ def command_auv_model(v_state, error_state, u_target, path_points, s_values, mu_
     dv = (-Cv[1,2]*r - Dv[1,1]*v)/M[1,1]
    
     v_t = np.sqrt(u**2 + v**2)
-    d_vt = (u*du + v*dv) / v_t
+    d_vt = (u*du + v*dv) / v_t if v_t != 0 else 0
 
     ds = v_t * np.cos(phi) + k2 * s1
 
@@ -363,7 +366,7 @@ def command_auv_model(v_state, error_state, u_target, path_points, s_values, mu_
 
     #Beta
     beta = np.arctan2(v, u)
-    d_beta = (dv*u - du*v) / (u**2 + v**2)
+    d_beta = (dv*u - du*v) / (u**2 + v**2) if v_t != 0 else 0
 
     d_phi = r + d_beta - curv * ds
 
@@ -380,32 +383,35 @@ def command_auv_model(v_state, error_state, u_target, path_points, s_values, mu_
     # Delta derivatives
     k_delta = 1
     phi_a = np.pi/2
-    delta = -phi_a * np.tanh(k_delta * y1)
+    # delta = -phi_a * np.tanh(k_delta * y1)
+    delta = -np.arctan(k_delta * y1)
     diff = phi - delta
     # print(diff)
-    d_delta = (-phi_a * k_delta * d_y1)* (1 - (np.tanh(k_delta * y1)) ** 2)
+    # d_delta = (-phi_a * k_delta * d_y1)* (1 - (np.tanh(k_delta * y1)) ** 2)
 
-    a1 = - 2 * k_delta * d_y1**2 
-    a2 = np.tanh(k_delta * y1)
+    redutor = 1 - np.tanh(0.1* np.sqrt(s1**2 + y1 ** 2))
+    # redutor = 1
 
-    dd_delta = -phi_a * k_delta*(dd_y1/(np.cosh(k_delta * y1)**2) - 2 * k_delta * d_y1**2 * np.tanh(k_delta * y1) / (np.cosh(k_delta*y1))**2)
+    d_delta = -k_delta * d_y1 / (1 + (k_delta * y1)**2)
+    d_delta = d_delta * redutor
 
-    if(dd_delta > 800):
-        a = 1
 
-    rd = d_delta - d_beta - k1 * sawtooth(phi - delta) + curv * ds
+    # dd_delta = -phi_a * k_delta*(dd_y1/(np.cosh(k_delta * y1)**2) - 2 * k_delta * d_y1**2 * np.tanh(k_delta * y1) / (np.cosh(k_delta*y1))**2)
+    dd_delta = -(k_delta * dd_y1 *(1 + (k_delta * y1)**2) - 2*k_delta**3 * y1 * d_y1**2) / (1 + (k_delta*y1)**2)**2
+    # dd_delta = 0
+    dd_delta = dd_delta * redutor
 
-    if((r - rd) > 100):
-        a = 4
+    rd = d_delta - 1*d_beta - k1 * sawtooth(phi - delta) + curv * ds
 
-    f_alpha = 1*dd_delta - k1*(d_phi - d_delta) + curv*dd_s + g_c * ds 
+
+    f_alpha = dd_delta - k1*(d_phi - d_delta) + curv*dd_s + g_c * ds 
     + dd_u*v/v_t**2 + 2 * d_vt * d_beta / v_t + (u/v_t**2)*((m_ur/m_v)*du * r + (Dv[1,1]*dv)/m_v)
     
     dr = (f_alpha - k3*(r - rd) - k5*sawtooth(phi - delta))/(1 - (m_ur/m_v)*(np.cos(beta)**2))
 
     ac = np.array([[du],[dv],[dr]])
 
-    ac = np.clip(ac, -500, 500)
+    # ac = np.clip(ac, -500, 500)
 
     torque = M @ ac + Cv @ v_state + Dv @ v_state
 
@@ -422,7 +428,7 @@ def command_auv_model(v_state, error_state, u_target, path_points, s_values, mu_
 
 
 
-    return torque, ds, xs, ys, r - rd, u - u_target, ac[2], ac[0], dcurv_dt
+    return torque, ds, xs, ys, r - rd, u - u_target, ac[2], ac[0], redutor
 
 
 def draw_p():
@@ -491,11 +497,17 @@ def get_path_points():
     # x = np.array([0, 0,  0,  0,  0,  0,  0])
     # x = np.array([0, -10, -20, -10, 0, -10, -20])
     x = np.array([2, -3, -8, -3, 2, -3, -8])
+    x = np.array([22, 19, 12, 17, 22, 19, 12])
+    x = np.array([32, 29, 22, 27, 32, 29, 22])
+
+
     y = np.array([  0,   5, 10, 15, 20,  25, 30])
+    y = np.array([-20, -10, 0, 10, 20, 30, 40])
+
 
     cs = CubicSpline(y, x)
 
-    y = np.linspace(0, y[-1], 10000)
+    y = np.linspace(y[0], y[-1], 10000)
     x = cs(y)
 
     distances = np.sqrt(np.diff(x)**2 + np.diff(y)**2)
@@ -656,6 +668,29 @@ def path_desc(s, ds,s_values, mu_values, phi_values ):
     dcurv_dt = (ddphif_dmu * dmuds + dphif_dmu * ddmuds_dmu) * dmuds * ds
 
     return xs, ys, phif, curv, dcurv_dt, g_c
+
+def s_closest(x,y,path_points):
+    all_s = path_points[2,:]
+
+    index = 0
+    s_closest = 0
+
+    xs = path_points[0, index]
+    ys = path_points[1, index]
+
+    distance_closest = np.sqrt((xs-x)**2 + (ys-y)**2)
+
+    for s in all_s:
+        xs = path_points[0, index]
+        ys = path_points[1, index]
+        distance = np.sqrt((xs-x)**2 + (ys-y)**2)
+        if(distance < distance_closest):
+            s_closest = s
+            distance_closest = distance
+        index += 1
+
+    return s_closest
+
 
 
 get_path_points()

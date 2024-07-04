@@ -14,7 +14,7 @@ def model(n_state, v_state, command):
     return [dn, dv]
 
 # Find the closest point on the trajectory to the current state.
-def get_closest(n_state, traj):
+def get_closest(n_state, traj, path_points):
     x, y, phi = n_state.flatten()
 
     if traj == "l":
@@ -24,30 +24,55 @@ def get_closest(n_state, traj):
         dir = np.array([[x - 5], [y - 5]]) / np.sqrt((x - 5) ** 2 + (y - 5) ** 2)
         closest = np.array([[5], [5]]) + 2 * dir
         return closest
+    else:
+        return s_closest(n_state[0,0], n_state[1,0], path_points)
 
 # Get the direction of the trajectory at the closest point.
-def get_tangent(closest, traj):
+def get_tangent(closest, traj, path_points):
     if traj == "l":
         tangent = np.array([[0], [1]])
     if traj == "c":
         dir = (closest - np.array([[5], [5]])) / 2
         dir = dir.flatten()
         tangent = np.array([[-dir[1]], [dir[0]]])
+    else:
+        s = closest
+        xs, ys, _, phif, curv, g_c, dx, dy, ddx, ddy = path_interrogation(s, path_points)
+
+        R = np.array([[np.cos(phif), np.sin(phif)], 
+                    [-np.sin(phif), np.cos(phif)]],dtype=float,)
+
+        tanx = (np.linalg.inv(R) @ [1, 0]).flatten()[0]
+        tany = (np.linalg.inv(R) @ [1, 0]).flatten()[1]
+        tangent = np.array([[tanx], [tany]])
+
     return tangent
 
 # Get the target point to follow on the trajectory.
-def get_target(n_state, traj):
-    closest = get_closest(n_state, traj)
-    tangent = get_tangent(closest, traj)
+def get_target(n_state, traj, path_points):
+    closest = get_closest(n_state, traj, path_points)
+    tangent = get_tangent(closest, traj, path_points)
+
+    if(traj != 'l' and traj != 'c'):
+        xs, ys, _, phif, curv, g_c, dx, dy, ddx, ddy = path_interrogation(closest, path_points)
+        closest = np.array([[xs], [ys]])
+
+
     target = closest + 2 * tangent
     return closest, target
 
 # Draw the chosen trajectory (line or circle).
-def draw_traj(traj):
+def draw_traj(traj, path_points):
     if traj == "l":
         return draw_traj_line()
-    else:
+    elif traj == 'c':
         return draw_traj_circle()
+    else: draw_path(path_points)
+
+def draw_path(path_points):
+    x_values, y_values = path_points[:2]
+    plt.plot(x_values, y_values, color="green", linestyle="--")
+
 
 # Update the state and velocity over time based on the command.
 def evolution(n, v, cmd, dt_ctr, positions_x, positions_y, times):
@@ -71,13 +96,17 @@ def evolution(n, v, cmd, dt_ctr, positions_x, positions_y, times):
     return n, v
 
 # Show the current state, target, and trajectory on a plot.
-def affichage(target, closest, traj, positions_x, positions_y, n):
+def affichage(target, closest, traj, positions_x, positions_y, n, path_points):
+
+
     plt.clf()
 
-    x_limit = [-1, 10]
-    y_limit = [-1, 10]
+    # x_limit = [-1, 10]
+    # y_limit = [-1, 10]
+    x_limit = [-5, 30]
+    y_limit = [-5, 35]
 
-    draw_traj(traj)
+    draw_traj(traj, path_points)
 
     plt.scatter(target[0], target[1], color="red", marker="x")
     plt.scatter(closest[0], closest[1], color="blue", marker="o")
@@ -95,30 +124,34 @@ def main():
     traj = sys.argv[1]
 
     # Simulation settings.
-    dt_ctr = 0.01
+    dt_ctr = 0.02
     total_time = 100.0
     steps = int(total_time / dt_ctr)
 
     # Initial state (position and orientation).
-    n = np.array([[0], [0], [0]], dtype=float)  # x, y, Φ
-    v = np.array([[1], [0], [0]], dtype=float)  # u, v, r
+    n = np.array([[10], [-4], [-np.pi/2]], dtype=float)  # x, y, Φ
+    v = np.array([[0], [0], [0]], dtype=float)  # u, v, r
 
     # Lists to store the x and y positions and times.
     positions_x = [n[0][0]]
     positions_y = [n[1][0]]
     times = [0]
 
+    u_target = 5
+
     previous_theta_d = None
+
+    path_points = get_path_points()
 
     # Run the simulation for each time step.
     for step in range(steps):
 
-        closest, target = get_target(n, traj)
-        previous_theta_d, cmd = command_los(n, v, target, previous_theta_d)
+        closest, target = get_target(n, traj, path_points)
+        previous_theta_d, cmd = command_los(n, v, target, previous_theta_d, u_target, dt_ctr)
 
         n, v = evolution(n, v, cmd, dt_ctr, positions_x, positions_y, times)
 
-        affichage(target, closest, traj, positions_x, positions_y, n)
+        affichage(target, closest, traj, positions_x, positions_y, n, path_points)
 
     plt.show()
 

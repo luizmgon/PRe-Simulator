@@ -14,7 +14,7 @@ def get_target_line(time):
     return final_position, first_derivative, second_derivative
 
 def get_target_path(time, path_points):
-    ds = 3
+    ds = 2
     s = ds * time
     xs, ys, _, phif, curv, g_c, dx, dy, ddx, ddy = path_interrogation(s, path_points)
     final_position = np.array([[xs], [ys], [0]], dtype=float)

@@ -87,8 +87,8 @@ def affichage(n, error_state, path_points):
 
     # x_limit = [-20, 10]
     # y_limit = [-5, 35]
-    x_limit = [-75, 10]
-    y_limit = [-5, 60]
+    x_limit = [-2, 40]
+    y_limit = [-25, 45]
 
     axs = plt.subplot(111)
     draw_traj(x_values, y_values, axs)
@@ -127,8 +127,8 @@ def affichage_complet(positions_x, positions_y, n, path_points, times, errors, e
     axs6 = plt.subplot(428)
     # x_limit = [-20, 10]
     # y_limit = [-5, 35]
-    x_limit = [-75, 10]
-    y_limit = [-5, 60]
+    x_limit = [-35, 25]
+    y_limit = [-5, 65]
 
     x_values, y_values = path_points[:2]
 
@@ -181,13 +181,13 @@ def main():
     x_values, y_values, s_values, mu_values, phi_values = draw_p()
 
     # Simulation settings.
-    dt_ctr = 0.01
-    total_time = 20
+    dt_ctr = 0.02
+    total_time = 35
     steps = int(total_time / dt_ctr)
 
     # Initial state (position and orientation).
-    n = np.array([[-30], [50], [-np.pi]], dtype=float)  # x, y, phiU
-    v = np.array([[2], [0], [0]], dtype=float)  # u, v, r
+    n = np.array([[0], [0], [0]], dtype=float)  # x, y, phiU
+    v = np.array([[0], [0], [0]], dtype=float)  # u, v, r
 
     s0 = 1
     u_target = 2
@@ -205,9 +205,9 @@ def main():
     # Run the simulation for each time step.
     for step in range(steps):
 
-        # affichage(n, error_state, path_points)
+        affichage(n, error_state, path_points)
 
-        cmd, ds, xs, ys, r_error, u_error, dr, du, y1 = command_auv_model(v, error_state, u_target, path_points, s_values, mu_values, phi_values)
+        cmd, ds, xs, ys, r_error, u_error, dr, du, y1 = command_auv_model(v, error_state, u_target, path_points)
 
         error_lin_speed.append(y1)
         error_ang_speed.append(r_error)
