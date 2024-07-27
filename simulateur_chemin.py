@@ -9,8 +9,10 @@ idx = 0
 
 # Calculate changes in state and velocity based on the current state, velocity, and command.
 def model(n_state, v_state, command):
+    wind = np.array([[-200],[200],[0]])
+    # wind = 0
     dn = J(n_state) @ v_state
-    dv = np.linalg.inv(M) @ (command - C(v_state) @ v_state - D(v_state) @ v_state)
+    dv = np.linalg.inv(M) @ (command - C(v_state) @ v_state - D(v_state) @ v_state + wind)
     return [dn, dv]
 
 # Find the closest point on the trajectory to the current state.
@@ -105,6 +107,8 @@ def affichage(target, closest, traj, positions_x, positions_y, n, path_points):
     # y_limit = [-1, 10]
     x_limit = [-5, 30]
     y_limit = [-5, 35]
+    x_limit = [min(path_points[0]) - 5, max(path_points[0]) + 5]
+    y_limit = [min(path_points[1]) - 5, max(path_points[1]) + 5]
 
     draw_traj(traj, path_points)
 
@@ -121,7 +125,8 @@ def affichage(target, closest, traj, positions_x, positions_y, n, path_points):
 # Main function to run the simulation.
 def main():
 
-    traj = sys.argv[1]
+    # traj = sys.argv[1]
+    traj = "3"
 
     # Simulation settings.
     dt_ctr = 0.02
@@ -129,7 +134,7 @@ def main():
     steps = int(total_time / dt_ctr)
 
     # Initial state (position and orientation).
-    n = np.array([[10], [-4], [-np.pi/2]], dtype=float)  # x, y, Φ
+    n = np.array([[0], [20], [0]], dtype=float)  # x, y, Φ
     v = np.array([[0], [0], [0]], dtype=float)  # u, v, r
 
     # Lists to store the x and y positions and times.
@@ -143,11 +148,13 @@ def main():
 
     path_points = get_path_points()
 
+    error_integral = np.zeros((3,1))
+
     # Run the simulation for each time step.
     for step in range(steps):
 
         closest, target = get_target(n, traj, path_points)
-        previous_theta_d, cmd = command_los(n, v, target, previous_theta_d, u_target, dt_ctr)
+        previous_theta_d, cmd, error_integral = command_los(n, v, target, previous_theta_d, u_target, dt_ctr, error_integral)
 
         n, v = evolution(n, v, cmd, dt_ctr, positions_x, positions_y, times)
 

@@ -190,7 +190,7 @@ def main():
     v = np.array([[0], [0], [0]], dtype=float)  # u, v, r
 
     s0 = 1
-    u_target = 2
+    u_target = 5
     error_state = initiate_error_state(n, v, s0, path_points )  # s1, y1, phi, s
 
     positions_x = [n[0][0]]

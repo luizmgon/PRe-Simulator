@@ -1,13 +1,27 @@
-from pyproj import Transformer
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+from scipy.interpolate import interp1d
 
-# Criar o objeto transformador para converter de WGS 84 para Lambert-93
-transformer = Transformer.from_crs(4326, 2154, always_xy=True)
 
-# Coordenadas geográficas (longitude, latitude) de Paris
-longitude = 3
-latitude = 46.5
+# Dados de exemplo (substitua pelos seus dados reais)
+timestamps = np.linspace(0, 10, num=5)
+new_timestamps = np.linspace(0,10, num = 40)
+dados = [1, 0.5, 3, 2, 1]  # Dados de exemplo (substitua pelos seus dados reais)
 
-# Transformar para o sistema Lambert-93
-x, y = transformer.transform(longitude, latitude)
+# Configurar a figura e os eixos
+fig, ax = plt.subplots()
 
-print(f"Coordenadas projetadas em Lambert-93: x={x}, y={y}")
+vel_rot = interp1d(timestamps, dados, kind='previous', fill_value="extrapolate")(new_timestamps)
+
+# Plotar os dados como onda quadrada
+ax.plot(new_timestamps, vel_rot, label='Onda Quadrada')
+
+# Configurações adicionais do gráfico
+ax.set_xlabel('Tempo')
+ax.set_ylabel('Amplitude')
+ax.set_title('Exemplo de Plot de Onda Quadrada')
+ax.legend()
+
+# Exibir o gráfico
+plt.show()

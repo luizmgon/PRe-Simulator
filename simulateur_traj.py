@@ -8,41 +8,49 @@ from scipy.integrate import solve_ivp
 
 
 def model(n_state, v_state, command):
+    wind = np.array([[1000],[0],[0]])
     dn = J(n_state) @ v_state
-    dv = np.linalg.inv(M_model) @ (command - C(v_state) @ v_state - D(v_state) @ v_state)
+    dv = np.linalg.inv(M_model) @ (command - C(v_state) @ v_state - D(v_state) @ v_state + wind)
     return [dn, dv]
 
 
 def model2(t, y, cmd):
     n_state = y[:3].reshape((3, 1))
     v_state = y[3:].reshape((3, 1))
+    wind = np.array([[-100],[100],[0]])
+    # wind = 0
+
 
     dn = J(n_state) @ v_state
-    dv = np.linalg.inv(M_model) @ (cmd - C(v_state) @ v_state - D(v_state) @ v_state)
+    dv = np.linalg.inv(M_model) @ (cmd - C(v_state) @ v_state - D(v_state) @ v_state + wind)
 
     dydt = np.vstack((dn, dv)).flatten()
     return dydt
 
 
-def command(com, n_state, v_state, target, d_target, dd_target):
+def command(com, n_state, v_state, target, d_target, dd_target, dt_ctl, error_integral):
+
     
     target = target[:2]
     d_target = d_target[:2]
     dd_target = dd_target[:2]  
     dn_state = (J(n_state) @ v_state)[:2]
 
+    error_integral += (target - n_state[:2])*dt_ctl
+
     k = None
 
     if com == "fblindiag":
-        k = dd_target + 2 * (d_target - dn_state) + (target - n_state[:2])
+        k = dd_target + 2 * (d_target - dn_state) + 1*(target - n_state[:2]) + 0.1 * error_integral
+        print(error_integral)
     
     elif com == "slid1diag":
         k = (dd_target + 1*(d_target - dn_state) + 0.5*np.sign(1*(d_target - dn_state) +1*(target - n_state[:2])))
 
     elif com == "slid2diag":
-        k = 5*np.sign(2*(d_target - dn_state) + 2*(target - n_state[:2]))
+        k = 5*np.sign(dd_target + 2*(d_target - dn_state) + 1*(target - n_state[:2]))
 
-    if(k is not None): return command_sous_diag(n_state, v_state, k)
+    if(k is not None): return command_sous_diag(n_state, v_state, k), error_integral
 
     #Fonctionnent pas sans seuil
     if com == "fblin":
@@ -54,7 +62,7 @@ def command(com, n_state, v_state, target, d_target, dd_target):
     elif com == "slid2":
         k = 4*np.sign((d_target - dn_state) + 1*(target - n_state[:2]))
 
-    if(k is not None): return command_sous(n_state, v_state, k)
+    if(k is not None): return command_sous(n_state, v_state, k), error_integral
 
     else:
         print("Invalid input")
@@ -83,8 +91,11 @@ def draw_traj(traj, path_points, axs):
 def affichage(target, traj, positions_x, positions_y, n, path_points ,ne_state):
         plt.clf()
 
-        x_limit = [-2, 40]
-        y_limit = [-25, 45]
+        x = [0, -40]
+        y = [-30, 50]
+
+        x_limit = [min(path_points[0]) - 5, max(path_points[0]) + 5]
+        y_limit = [min(path_points[1]) - 5, max(path_points[1]) + 5]
         axs = plt.subplot(111)
         draw_traj(traj, path_points, axs)
 
@@ -109,6 +120,8 @@ def affichage_complet(target, traj, positions_x, positions_y, n, path_points, ti
     axs6 = plt.subplot(428)
     x_limit = [-10, 40]
     y_limit = [-1, 32]
+    x_limit = [min(path_points[0]) - 5, max(path_points[0]) + 5]
+    y_limit = [min(path_points[1]) - 5, max(path_points[1]) + 5]
 
     # Primeiro gráfico
     axs1.plot(positions_x, positions_y, color="blue")
@@ -186,18 +199,18 @@ def main():
 
     # com = sys.argv[1]
     # traj = sys.argv[2]
-    com = "slid2diag"
+    com = "fblindiag"
     traj = "3"
 
     # Simulation settings
     dt = 0.02
-    total_time = 100.0
+    total_time = 70.0
     steps = int(total_time / dt)
     time = 0
 
     # Initial state
-    n = np.array([[0], [0], [0]], dtype=float)  # x, y, Φ
-    v = np.array([[1], [0], [0]], dtype=float)  # u, v, r
+    n = np.array([[0], [20], [0]], dtype=float)  # x, y, Φ
+    v = np.array([[0], [0], [0]], dtype=float)  # u, v, r
 
     # Lists to store the x and y positions and times.
     positions_x = [n[0][0]]
@@ -215,6 +228,8 @@ def main():
 
     path_points = get_path_points()
 
+    error_integral = 0
+
     # Simulation
     for step in range(steps):
 
@@ -222,20 +237,20 @@ def main():
         target, d_target, dd_target = get_new_target(time+2, traj, path_points)
 
 
-        cmd = command(com, n, v, target, d_target, dd_target)
-        # cmd, state_error_integral, speed_error_integral, state_error, ac, er_sp, ne_state = command_h(n, v, target, d_target, dd_target, state_error_integral, dt, speed_error_integral, state_error)
+        # cmd, error_integral = command(com, n, v, target, d_target, dd_target, dt, error_integral)
+        cmd, state_error_integral, speed_error_integral, state_error, ac, er_sp, ne_state = command_h(n, v, target, d_target, dd_target, state_error_integral, dt, speed_error_integral, state_error)
 
         # error_lin_speed.append(er_sp[0])
         # error_ang_speed.append(er_sp[2])
-        # taus_lin.append(ac[0])
-        # taus_ang.append(ac[2])
+        taus_lin.append(cmd[0])
+        taus_ang.append(cmd[2])
 
         n, v = evolution2(n, v, cmd, dt, positions_x, positions_y, times, errors, target)
 
         time = times[-1]
-        # print(time)
+        print(time)
 
-        affichage(target, traj, positions_x, positions_y, n, path_points, n)
+        # affichage(target, traj, positions_x, positions_y, n, path_points, n)
 
 
     affichage_complet(target, traj, positions_x, positions_y, n, path_points, times, errors, error_lin_speed, error_ang_speed, taus_lin, taus_ang)

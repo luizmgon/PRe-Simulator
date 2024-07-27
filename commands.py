@@ -60,7 +60,13 @@ def D(v):
 
 def command_h(n_state, v_state, target, d_target, dd_target, state_error_integral, dt, speed_error_integral, previous_state_error):
 
+    # if(n_state[0] < -40 and n_state[0] > -50):
+    #     # n_state = np.array([[n_state[0][0] - 3], [n_state[1][0] - 3], [n_state[2][0]]])
+    #     d_target = 2 * d_target
+    #     print("GPS decale")
+
     ne_state = n_state + np.array([[tracking_point_distance*np.cos(n_state[2,0])], [tracking_point_distance*np.sin(n_state[2,0])], [0]])
+    
 
     invT = np.linalg.inv(T)
     invJ = np.linalg.inv(J(ne_state))
@@ -75,7 +81,7 @@ def command_h(n_state, v_state, target, d_target, dd_target, state_error_integra
 
 
     Kp_state = np.array([[1], [1], [0]])
-    Ki_state = np.array([[0], [0], [0]])
+    Ki_state = np.array([[1], [1], [0]])
 
     n_correction = d_target + Kp_state * state_error + Ki_state * state_error_integral
 
@@ -90,7 +96,7 @@ def command_h(n_state, v_state, target, d_target, dd_target, state_error_integra
     if(previous_state_error is not None):
         state_error_derivative = (state_error - previous_state_error) / dt
 
-    Kp_speed = np.array([[10], [10], [10]])
+    Kp_speed = np.array([[10], [0], [10]])
 
     dn_correction = dd_target + Kp_state * state_error_derivative + Ki_state * state_error
 
@@ -116,9 +122,6 @@ def command_sous_diag(n_state, v_state, k):
     x,y,phi = n_state.flatten()
     u,v,r = v_state.flatten()
 
-    # if(u > 2.5): return np.array([[0],[0],[0]])
-
-
     Cv = C(v_state)
     Dv = D(v_state)
 
@@ -129,13 +132,17 @@ def command_sous_diag(n_state, v_state, k):
     
     B = [[-dv*np.sin(phi)], [dv*np.cos(phi)]]
    
-    inv = np.linalg.inv(A)
-    dif = (k - B)
-    ac = inv @ dif
+    if(u > 0.5):
+        inv = np.linalg.inv(A)
+        dif = (k - B)
+        ac = inv @ dif
 
-    ac[1] = -10*(r - ac[1])
+        ac[1] = -10*(r - ac[1])
 
-    ac = np.array([[float(ac[0])],[dv],[float(ac[1])]])
+        ac = np.array([[float(ac[0])],[dv],[float(ac[1])]])
+
+    else: ac = np.array([[10],[0],[0]])
+
     torque = M @ ac + Cv @ v_state + Dv @ v_state
 
     return torque
@@ -180,7 +187,7 @@ def command_sous(n_state, v_state, k):
 
     return torque
 
-def command_los(n_state, v_state, target, previous_theta_d, u_target, dt_ctr):
+def command_los(n_state, v_state, target, previous_theta_d, u_target, dt_ctr, error_integral):
     u = v_state[0,0]
     x,y,theta = n_state.flatten()
     xd, yd = target.flatten()[:2]
@@ -201,13 +208,16 @@ def command_los(n_state, v_state, target, previous_theta_d, u_target, dt_ctr):
 
     k4 = 1
 
-    ac = np.array([[-k4*(u - u_target)],[0],[k*theta_d + 1*k*(variacao)/dt_ctr]])
+    error_integral += np.array([[u - u_target], [0], [theta_d]])
+    ki = -2
+    print(u - u_target, theta_d)
+    ac = np.array([[-k4*(u - u_target)],[0],[k*theta_d + 1*k*(variacao)/dt_ctr]]) + ki * error_integral
 
     # ac = np.array([[0],[0],[k*theta_d]])
     torque = M @ ac + C(v_state) @ v_state + D(v_state) @ v_state
     torque[1] = 0
 
-    return previous_theta_d, torque
+    return previous_theta_d, torque, error_integral
 
 def command_full(n_state, v_state, target, d_target, dd_target):
     dn_state = J(n_state) @ v_state
@@ -493,89 +503,198 @@ def get_mu(s_in,s_values, mu_values):
 
     return mu_values[indice]
 
-def get_path_points():
-    # x = np.array([0, 0,  0,  0,  0,  0,  0])
-    # x = np.array([0, -10, -20, -10, 0, -10, -20])
-    x = np.array([2, -3, -8, -3, 2, -3, -8])
-    x = np.array([22, 19, 12, 17, 22, 19, 12])
-    x = np.array([32, 29, 22, 27, 32, 29, 22])
+# def get_path_points(pŕint=False):
+#     # x = np.array([0, 0,  0,  0,  0,  0,  0])
+#     # x = np.array([0, -10, -20, -10, 0, -10, -20])
+#     # x = np.array([2, -3, -8, -3, 2, -3, -8])
+#     # x = np.array([22, 19, 12, 17, 22, 19, 12])
+#     x = np.array([32, 29, 22, 27, 32, 29, 22])
 
 
-    y = np.array([  0,   5, 10, 15, 20,  25, 30])
-    y = np.array([-20, -10, 0, 10, 20, 30, 40])
+#     # y = np.array([  0,   5, 10, 15, 20,  25, 30])
+#     y = np.array([-20, -10, 0, 10, 20, 30, 40])
 
 
-    cs = CubicSpline(y, x)
+#     cs = CubicSpline(y, x)
 
-    y = np.linspace(y[0], y[-1], 10000)
-    x = cs(y)
+#     y = np.linspace(y[0], y[-1], 10000)
+#     x = cs(y)
 
-    distances = np.sqrt(np.diff(x)**2 + np.diff(y)**2)
-    s = np.zeros_like(x)
+#     # x = [-25, -150]
+#     # y = [10, -70]
+
+#     # x = np.linspace(x[0], x[-1], 1000)
+#     # y = cs(x)
+#     # y = np.linspace(y[0], y[-1], 1000)
+
+#     distances = np.sqrt(np.diff(x)**2 + np.diff(y)**2)
+#     s = np.zeros_like(x)
+#     s[1:] = np.cumsum(distances)
+
+#     ds = np.gradient(s)
+
+#     # Calcular as derivadas usando diferenças finitas
+#     dx = np.gradient(x) / ds
+#     dy = np.gradient(y) / ds
+
+#     ddx = np.gradient(dx) / ds
+#     ddy = np.gradient(dy) / ds
+
+#     phi_f = np.arctan2(dy, dx)
+
+#     # Calcular a curvatura
+#     curvature = dx * ddy - dy * ddx / (dx**2 + dy**2)**1.5
+
+#     dc = np.gradient(curvature)
+
+#     # Calcular o gradiente de c em relação a s
+#     g_c = dc / ds
+
+
+#     if(print):
+#             # Plotar o caminho, curvatura, phi_f e g_curvature
+#         plt.figure(figsize=(12, 10))
+
+#         # Plotar o caminho
+#         plt.subplot(4, 1, 1)
+#         plt.plot(x, y, 'b-', label='Caminho')
+#         plt.scatter(x, y, color='red', label='Pontos de Controle')
+#         plt.xlabel('X')
+#         plt.ylabel('Y')
+#         plt.title('Caminho, Curvatura, phi_f e Gradiente de Curvatura')
+#         plt.legend()
+#         plt.grid(True)
+
+#         # Plotar a curvatura
+#         plt.subplot(4, 1, 2)
+#         plt.plot(s, curvature, 'g-', label='Curvatura')
+#         plt.xlabel('Distância ao Longo do Caminho (s)')
+#         plt.ylabel('Curvatura')
+#         plt.legend()
+#         plt.grid(True)
+
+#         # Plotar phi_f
+#         plt.subplot(4, 1, 3)
+#         plt.plot(s, phi_f, 'r-', label='phi_f')
+#         plt.xlabel('Distância ao Longo do Caminho (s)')
+#         plt.ylabel('phi_f')
+#         plt.legend()
+#         plt.grid(True)
+
+
+#         # Plotar g_curvature
+#         plt.subplot(4, 1, 4)
+#         plt.plot(s, g_c, 'm-', label='Gradiente de Curvatura (g_curvature)')
+#         plt.xlabel('Distância ao Longo do Caminho (s)')
+#         plt.ylabel('Gradiente de Curvatura')
+#         plt.legend()
+#         plt.grid(True)
+
+#         # plt.tight_layout()
+#         plt.show()
+
+#     return np.vstack((x, y, s, phi_f, curvature, g_c, dx, dy, ddx, ddy))
+
+def get_path_points(print_plot=False):
+    # Define o parâmetro t
+    
+    
+    # Define x e y como funções de t
+    # x = np.array([32, 29, 22, 27, 32, 29, 22])
+    # y = np.array([-20, -10, 0, 10, 20, 30, 40])
+
+    # x = np.array([40,20,20,0,40])
+    # y = np.array([0,20,40,40,-20])
+
+    x = np.array([-5, 120])
+    y = np.array([-5, 80])
+
+    t = np.linspace(0, 1, len(x))
+    
+    # Cria splines cúbicas para x(t) e y(t)
+    cs_x = CubicSpline(t, x)
+    cs_y = CubicSpline(t, y)
+    
+    # Gera pontos para o parâmetro t
+    t_dense = np.linspace(t[0], t[-1], 10000)
+    x_dense = cs_x(t_dense)
+    y_dense = cs_y(t_dense)
+    
+    # Calcula as distâncias e a distância cumulativa ao longo do caminho
+    distances = np.sqrt(np.diff(x_dense)**2 + np.diff(y_dense)**2)
+    s = np.zeros_like(x_dense)
     s[1:] = np.cumsum(distances)
-
-    ds = np.gradient(s)
-
-    # Calcular as derivadas usando diferenças finitas
-    dx = np.gradient(x) / ds
-    dy = np.gradient(y) / ds
-
-    ddx = np.gradient(dx) / ds
-    ddy = np.gradient(dy) / ds
-
-    phi_f = np.arctan2(dy, dx)
-
-    # Calcular a curvatura
-    curvature = dx * ddy - dy * ddx / (dx**2 + dy**2)**1.5
-
-    dc = np.gradient(curvature)
-
-    # Calcular o gradiente de c em relação a s
-    g_c = dc / ds
-
-    return np.vstack((x, y, s, phi_f, curvature, g_c, dx, dy, ddx, ddy))
-
-    if(True):
-            # Plotar o caminho, curvatura, phi_f e g_curvature
+    
+    # Calcula ds/dt
+    ds_dt = np.gradient(s, t_dense)
+    
+    # Calcula as derivadas primeira e segunda de x e y em relação a t
+    dx_dt = cs_x(t_dense, 1)
+    dy_dt = cs_y(t_dense, 1)
+    ddx_dt = cs_x(t_dense, 2)
+    ddy_dt = cs_y(t_dense, 2)
+    
+    # Converte as primeiras derivadas para serem em relação a s
+    dx_ds = dx_dt / ds_dt
+    dy_ds = dy_dt / ds_dt
+    
+    # Converte as segundas derivadas para serem em relação a s
+    ddx_ds = (ddx_dt / ds_dt**2) - (dx_dt * np.gradient(ds_dt, t_dense) / ds_dt**3)
+    ddy_ds = (ddy_dt / ds_dt**2) - (dy_dt * np.gradient(ds_dt, t_dense) / ds_dt**3)
+    
+    # Calcula phi_f (ângulo do vetor tangente)
+    phi_f = np.arctan2(dy_ds, dx_ds)
+    
+    # Calcula a curvatura usando derivadas em relação a t
+    curvature = (dx_dt * ddy_dt - dy_dt * ddx_dt) / (dx_dt**2 + dy_dt**2)**1.5
+    
+    # Calcula o gradiente da curvatura em relação a s
+    dc_ds = np.gradient(curvature, s)
+    g_c = dc_ds
+    
+    if print_plot:
+        # Plota o caminho, curvatura, phi_f e gradiente de curvatura
         plt.figure(figsize=(12, 10))
-
-        # Plotar o caminho
+        
+        # Plota o caminho
         plt.subplot(4, 1, 1)
-        plt.plot(x, y, 'b-', label='Caminho')
+        plt.plot(x_dense, y_dense, 'b-', label='Caminho')
         plt.scatter(x, y, color='red', label='Pontos de Controle')
         plt.xlabel('X')
         plt.ylabel('Y')
         plt.title('Caminho, Curvatura, phi_f e Gradiente de Curvatura')
         plt.legend()
         plt.grid(True)
-
-        # Plotar a curvatura
+        
+        # Plota a curvatura
         plt.subplot(4, 1, 2)
         plt.plot(s, curvature, 'g-', label='Curvatura')
         plt.xlabel('Distância ao Longo do Caminho (s)')
         plt.ylabel('Curvatura')
         plt.legend()
         plt.grid(True)
-
-        # Plotar phi_f
+        
+        # Plota phi_f
         plt.subplot(4, 1, 3)
         plt.plot(s, phi_f, 'r-', label='phi_f')
         plt.xlabel('Distância ao Longo do Caminho (s)')
         plt.ylabel('phi_f')
         plt.legend()
         plt.grid(True)
-
-
-        # Plotar g_curvature
+        
+        # Plota o gradiente de curvatura
         plt.subplot(4, 1, 4)
         plt.plot(s, g_c, 'm-', label='Gradiente de Curvatura (g_curvature)')
         plt.xlabel('Distância ao Longo do Caminho (s)')
         plt.ylabel('Gradiente de Curvatura')
         plt.legend()
         plt.grid(True)
-
-        # plt.tight_layout()
+        
+        plt.tight_layout()
         plt.show()
+    
+    return np.vstack((x_dense, y_dense, s, phi_f, curvature, g_c, dx_ds, dy_ds, ddx_ds, ddy_ds))
+
 
 def path_interrogation(s_in, path_points):
 
@@ -692,5 +811,5 @@ def s_closest(x,y,path_points):
     return s_closest
 
 
-
-get_path_points()
+if __name__ == "__main__":
+    get_path_points(True)
