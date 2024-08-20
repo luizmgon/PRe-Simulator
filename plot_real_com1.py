@@ -3,16 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from scipy.interpolate import interp1d
 
-# Substitua 'now_str' pelo valor apropriado
-# now_str = "2024-07-15_16-52-20-LOSofc"  # Por exemplo
-# now_str = "2024-07-15_16-52-20-LOSofc"  # Por exemplo
-# now_str = "2024-07-15_16-43-07-Hofc" 
-# now_str = "2024-07-15_16-46-49-AUVofc" 
-# now_str = "2024-07-15_16-55-43-fblinOFC" 
-# now_str = "2024-07-15_16-59-25-SLIDOFC" 
-
 now_str = "2024-07-23_14-57-08-first_H"
-# now_str = "2024-07-23_15-25-57-first_AUV_moinsang"
 # now_str ="2024-07-23_15-31-57-first_AUV_plusang"
 # now_str = "2024-07-23_15-38-55-first_LOS"
 # now_str = "2024-07-23_15-49-30-first_FBLIN"
@@ -25,7 +16,7 @@ filename_command = f"/home/luiz/log_bboat2/{now_str}/command.txt"
 filename_speed = f"/home/luiz/log_bboat2/{now_str}/speed.txt"
 
 
-# Função para carregar e interpolar os dados
+# Function to load and interpolate data
 def load_and_interpolate(filename, timestamps_command, num_points=10000):
     data = np.loadtxt(filename, delimiter=',')
     timestamps = data[:, 0]
@@ -48,17 +39,17 @@ def load_and_interpolate(filename, timestamps_command, num_points=10000):
 data_command = np.loadtxt(filename_command, delimiter=',')
 timestamps_command = data_command[:, 0]
 
-# Carregar e interpolar dados de ambos os arquivos
+# Load and interpolate data from both files
 timestamps_rob, x_rob, y_rob, z_rob = load_and_interpolate(filename_pose_rob, timestamps_command)
 timestamps_target, x_target, y_target, z_target = load_and_interpolate(filename_target, timestamps_command)
 timestamps_speed, speed_u, speed_v, speed_r =  load_and_interpolate(filename_speed, timestamps_command)
 
 
-# Garantir que os novos timestamps sejam os mesmos para ambos os conjuntos de dados
+# Ensure new timestamps are the same for both datasets
 new_timestamps = np.linspace(min(timestamps_rob.min(), timestamps_target.min(), timestamps_speed.min()), 
                              max(timestamps_rob.max(), timestamps_target.max(), timestamps_speed.min()), num=10000)
 
-# Re-interpolar para garantir a mesma linha do tempo
+# Re-interpolate to ensure the same timeline
 x_rob = interp1d(timestamps_rob, x_rob, kind='linear', fill_value="extrapolate")(new_timestamps)
 y_rob = interp1d(timestamps_rob, y_rob, kind='linear', fill_value="extrapolate")(new_timestamps)
 z_rob = interp1d(timestamps_rob, z_rob, kind='linear', fill_value="extrapolate")(new_timestamps)
@@ -77,7 +68,7 @@ speed_r = interp1d(timestamps_speed, speed_r, kind='linear', fill_value="extrapo
 
 errors = np.sqrt((x_rob - x_target)**2 + (y_rob - y_target)**2)
 
-# Carregar os dados do arquivo de comandos
+# Load command data from file
 
 vel_rot = data_command[:, 1]
 vel_frente = data_command[:, 2]
@@ -89,7 +80,7 @@ path_data = np.loadtxt(filename_path, delimiter=',')
 path_x = path_data[0]
 path_y = path_data[1]
 
-# Configurar a figura e os eixos
+# Set up the figure and axes
 spacex = (max(np.max(x_rob), np.max(path_x)) - min(np.min(x_rob), np.min(path_x))) * 0.1
 spacey = (max(np.max(y_rob), np.max(path_y)) - min(np.min(y_rob), np.min(path_y))) * 0.1
 
@@ -117,7 +108,7 @@ ax3.set_ylabel('Velocity input (m/s)')
 # ax4.set_xlabel('Time (s)')
 # ax4.set_ylabel('Position Error (m)')
 
-# Inicializar os pontos que serão atualizados
+# Initialize points to be updated
 point_rob, = ax1.plot([], [], 'ro')
 point_target, = ax1.plot([], [], 'bx', label='Initial position', ms=10, markeredgewidth=3)
 trajectory_rob, = ax1.plot([], [], 'r-', label='Followed trajectory')
@@ -133,7 +124,7 @@ line_com_frente, = ax3.plot([], [], 'b-', label='Forward command')
 
 zero, = ax3.plot([-1000, 1000], [0, 0], ':', color='gray')
 
-# Função de inicialização da animação
+# Initialization function for the animation
 def init():
     point_rob.set_data([], [])
     point_target.set_data([], [])
@@ -145,7 +136,7 @@ def init():
     # error_plot.set_data([], [])
     return point_rob, point_target, zero, line_com_frente, line_com_rot,
 
-# Função de atualização da animação
+# Update function for the animation
 def update(frame):
     point_rob.set_data(y_rob[frame], x_rob[frame])
     point_target.set_data(y_rob[0], x_rob[0])
@@ -156,7 +147,7 @@ def update(frame):
     trajectory_rob.set_data(y_rob[:frame], x_rob[:frame])
     # trajectory_target.set_data(y_target[:frame], x_target[:frame])
     
-    # Atualizar as linhas de velocidade
+    # Update velocity lines
     line_com_rot.set_data(timestamps_command[:frame] - timestamps_command.min(), vel_rot[:frame])
     line_com_frente.set_data(timestamps_command[:frame] - timestamps_command.min(), vel_frente[:frame])
 
@@ -165,10 +156,10 @@ def update(frame):
     
     return point_rob, point_target, trajectory_rob, trajectory_target
 
-# Criar a animação
+# Create the animation
 ani = FuncAnimation(fig, update, frames=len(timestamps_command), init_func=init, blit=False, interval=0, repeat=False)
 
-# Exibir a animação
+# Display the animation
 ax1.legend()
 ax3.legend()
 # ax2.legend()
